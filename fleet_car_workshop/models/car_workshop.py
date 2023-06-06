@@ -17,7 +17,7 @@
 #    If not, see <https://www.gnu.org/licenses/>.
 #
 ##############################################################################
-from datetime import date, datetime
+from datetime import date
 from dateutil.relativedelta import relativedelta
 from psutil import long
 
@@ -32,22 +32,18 @@ class CarWorkshop(models.Model):
 
     def _get_default_vehicle(self):
         car_id = self._context.get('active_id')
-        car = self.env['car.car'].browse(car_id)
+        car = self.env['cars.cars'].browse(car_id)
         if car.name:
             return car.name.id
         else:
             return 1
 
-    vehicle_id = fields.Many2one('car.car', string='Vehicle',
-                                 default=lambda self: self.env.context.get('default_vehicle_id'), index=True,
-                                 tracking=True,
-                                 change_default=True)
 
 
     @api.model
     def _default_company_id(self):
         car_id = self._context.get('active_id')
-        car = self.env['car.car'].browse(car_id)
+        car = self.env['cars.cars'].browse(car_id)
         if car.vehicle_id:
             return car.vehicle_id.company_id.id
         else:
@@ -55,14 +51,12 @@ class CarWorkshop(models.Model):
 
     def _get_default_partner(self):
         if 'default_vehicle_id' in self.env.context:
-            default_vehicle_id = self.env['car.car'].browse(self.env.context['default_vehicle_id'])
+            default_vehicle_id = self.env['cars.cars'].browse(self.env.context['default_vehicle_id'])
             return default_vehicle_id.partner_id
 
     def _get_default_stage_id(self):
         """ Gives default stage_id """
         vehicle_id = self.env.context.get('default_vehicle_id')
-        if not vehicle_id:
-            return False
         return self.stage_find(vehicle_id, [('fold', '=', False)])
 
     @api.model
@@ -82,7 +76,7 @@ class CarWorkshop(models.Model):
     description = fields.Html(string='Description')
     sequence = fields.Integer(string='Sequence', select=True, default=10,
                               help="Gives the sequence order when displaying a list of tasks.")
-    tag_ids = fields.Many2many('worksheet.tags', string='Tags', ondelete='cascade')
+    tag_ids = fields.Many2many('workshop.worksheet.tags', string='Tags', ondelete='cascade')
     kanban_state = fields.Selection(
         [('normal', 'In Progress'), ('done', 'Ready for next stage'), ('blocked', 'Blocked')], 'Kanban State',
         help="A task's kanban state indicates special situations affecting it:\n"
@@ -102,9 +96,13 @@ class CarWorkshop(models.Model):
     id = fields.Integer('ID', readonly=True)
     company_id = fields.Many2one('res.company', string='Company', required=True, default=_default_company_id)
     color = fields.Integer(string='Color Index')
-    stage_id = fields.Many2one('worksheet.stages', string='Stage', ondelete='restrict', tracking=True, index=True,
-                               default=_get_default_stage_id, group_expand='_read_group_stage_ids',
-                               domain="[('vehicle_ids', '=', vehicle_id)]", copy=False)
+    vehicle_id = fields.Many2one('cars.cars', string='Vehicle',
+                                 default=lambda self: self.env.context.get('default_vehicle_id'), index=True,
+                                 tracking=True,
+                                 change_default=True)
+
+    stage_id = fields.Many2one('vehicle.worksheet.stages', string='Stage', ondelete='restrict', tracking=True, index=True,
+                               default=_get_default_stage_id, group_expand='_read_group_stage_ids',copy=False)
     state = fields.Selection([
         ('waiting', 'Ready'),
         ('workshop_create_invoices', 'Invoiced'),
@@ -118,47 +116,45 @@ class CarWorkshop(models.Model):
                                                 "('res_id', '=', id),"
                                                 "('mimetype', 'ilike', 'image')]",
                                          string='Displayed Image')
-    planned_works = fields.One2many('planned.work', 'work_id', string='Planned/Ordered Works')
-    works_done = fields.One2many('planned.work', 'work_id', string='Work Done', domain=[('completed', '=', True)])
-    materials_used = fields.One2many('material.used', 'material_id', string='Materials Used')
+    planned_works = fields.One2many('workshop.planned.work', 'work_id', string='Planned/Ordered Works')
+    works_done = fields.One2many('workshop.planned.work', 'work_id', string='Work Done', domain=[('completed', '=', True)])
+    materials_used = fields.One2many('workshop.material.used', 'material_id', string='Materials Used')
     remaining_hour = fields.Float(string='Remaining Hour', readonly=True, compute="hours_left")
     effective_hour = fields.Float(string='Hours Spent', readonly=True, compute="hours_spent")
-    amount_total = fields.Float(string='Total Amount', readonly=True, compute="amount_total1")
+    amount_total = fields.Float(string='Total Amount', readonly=True, compute="_compute_amount_total")
     invoice_count = fields.Integer(string="Invoice_count", compute='compute_invoice_count')
+    delivery_count = fields.Integer(
+        string="Deliveries", compute="_compute_deliveries_count"
+    )
 
     @api.depends('planned_works.work_cost', 'materials_used.price')
-    def amount_total1(self):
-        for records in self:
-            for hour in records:
-                amount_totall = 0.0
-                for line in hour.planned_works:
-                    amount_totall += line.work_cost
-                for line2 in hour.materials_used:
-                    amount_totall += line2.price
-                records.amount_total = amount_totall
+    def _compute_amount_total(self):
+        for record in self:
+            record.amount_total = (sum(record.mapped('planned_works').mapped('work_cost')) + sum(record.mapped('materials_used').mapped('price')))
 
     def cancel(self):
-        self.state = 'cancel'
+        for record in self:
+            record.state = 'cancel'
+
+    def set_to_ready(self):
+        for record in self:
+            record.state = 'waiting'
 
     def workshop_create_invoices(self):
-        self.state = 'workshop_create_invoices'
-        inv_obj = self.env['account.move']
-        inv_line_obj = self.env['account.move.line']
-        customer = self.partner_id
-        if not customer.name:
-            raise UserError(
-                _(
-                    'Please select a Customer.'))
-
-
-        invoice_line_ids = []
-        company_id = self.env['res.users'].browse(1).company_id
-        currency_value = company_id.currency_id.id
         self.ensure_one()
         journal_id = self.env['ir.config_parameter'].sudo().get_param(
             'fleet_car_workshop.invoice_journal_type')
         if not journal_id:
-            journal_id = 1
+            raise UserError(_("There is no journal configured for vehicle workshop"))
+        customer = self.partner_id
+        if not customer.name:
+            raise UserError(_('Please select a Customer.'))
+        self.state = 'workshop_create_invoices'
+        inv_obj = self.env['account.move']
+
+        invoice_line_ids = []
+        company_id = self.company_id or self.env.user.company_id
+        currency_value = company_id.currency_id.id
 
         inv_data = {
             'ref': self.name,
@@ -169,6 +165,10 @@ class CarWorkshop(models.Model):
             'invoice_origin': self.name,
             'company_id': company_id.id,
             'type': 'out_invoice',
+            'invoice_partner_bank_id': self.env.user.company_id.partner_id.bank_ids[:1].id,
+            'invoice_user_id': self.user_id and self.user_id.id or False,
+            'fiscal_position_id': customer.property_account_position_id and customer.property_account_position_id.id or False,
+
         }
 
         for records in self.planned_works:
@@ -222,91 +222,112 @@ class CarWorkshop(models.Model):
             result['res_id'] = inv_id.ids[0]
         else:
             result = {'type': 'ir.actions.act_window_close'}
-        invoiced_records = self.env['car.workshop']
 
-        total = 0
-        for rows in invoiced_records:
-            invoiced_date = rows.date
-            invoiced_date = invoiced_date[0:10]
-            if invoiced_date == str(date.today()):
-                total = total + rows.price_subtotal
-        for lines in self.materials_used:
-            product_ids = self.env['product.product'].search(
-                [('id', '=', lines.material.id)])
-            for prod_id in product_ids:
-                move_id = self.env['stock.picking']
-                type_object = self.env['stock.picking.type']
-                company_id = self.env.context.get('company_id') or self.env.user.company_id.id
-                types = type_object.search([('code', '=', 'outgoing'), ('warehouse_id.company_id', '=', company_id)],
-                                           limit=1)
-                vals = {
-                    'partner_id': self.partner_id.id,
-                    'origin': self.name,
-                    'move_type': 'one',
-                    'picking_type_id': types.id,
-                    'location_id': types.default_location_src_id.id,
-                    'location_dest_id': self.partner_id.property_stock_customer.id,
-                    'move_lines': [(0, 0, {
-                        'name': self.name,
-                        'product_id': prod_id.id,
-                        'product_uom': prod_id.uom_id.id,
-                        'product_uom_qty': lines.amount,
-                        'quantity_done': lines.amount,
-                        'location_id': types.default_location_src_id.id,
+        if self.materials_used:
+            stock_picking_obj = self.env['stock.picking']
+            picking_type_id = self.env['stock.picking.type'].search([('code', '=', 'outgoing'), ('warehouse_id.company_id', '=', company_id.id)],
+                               limit=1)
+            vals = {
+                        'partner_id': self.partner_id.id,
+                        'origin': self.name,
+                        'car_workshop_id':self.id,
+                        'move_type': 'one',
+                        'picking_type_id': picking_type_id.id,
+                        'location_id': picking_type_id.default_location_src_id.id,
                         'location_dest_id': self.partner_id.property_stock_customer.id,
-                    })],
-                }
-                move = move_id.create(vals)
-                move.action_confirm()
-                move.action_assign()
-                move.action_done()
+                    }
+
+            move_lines_list = []
+            for product in self.materials_used:
+                move_lines_list.append((0, 0, {
+                            'name': self.name,
+                            'product_id': product.material.id,
+                            'product_uom': product.material.uom_id.id,
+                            'product_uom_qty': product.amount,
+                            'quantity_done': product.amount,
+                            'location_id': picking_type_id.default_location_src_id.id,
+                            'location_dest_id': self.partner_id.property_stock_customer.id,
+                        }))
+
+            vals.update({'move_lines':move_lines_list})
+            picking_id = stock_picking_obj.create(vals)
+            picking_id.action_confirm()
+            picking_id.action_assign()
+            picking_id.action_done()
         return result
+
+    def action_view_delivery(self):
+        delivery = self.env["stock.picking"].search(
+            [("car_workshop_id", "=", self.id), ("picking_type_code", "=", "outgoing")]
+        )
+        action = self.env.ref("stock.action_picking_tree_all").read()[0]
+        action['context'] = {'create': False}
+
+        if len(delivery) > 1:
+            action["domain"] = [("id", "in", delivery.ids)]
+        elif len(delivery) == 1:
+            form_view = [(self.env.ref("stock.view_picking_form").id, "form")]
+            if "views" in action:
+                action["views"] = form_view + [
+                    (state, view) for state, view in action["views"] if view != "form"
+                ]
+            else:
+                action["views"] = form_view
+            action["res_id"] = delivery.id
+        else:
+            action = {"type": "ir.actions.act_window_close"}
+        return action
+
+    def _compute_deliveries_count(self):
+        for record in self:
+            delivery_count = self.env["stock.picking"].search_count(
+                [
+                    ("car_workshop_id", "=", record.id),
+                    ("picking_type_code", "=", "outgoing"),
+                ]
+            )
+            record.delivery_count = delivery_count
+
+
 
     @api.depends('works_done.duration')
     def hours_spent(self):
-        for hour in self:
-            effective_hour = 0.0
-            for line in hour.works_done:
-                effective_hour += line.duration
-            self.effective_hour = effective_hour
+        for record in self:
+            record.effective_hour = sum(record.mapped('works_done').mapped('duration'))
 
     @api.depends('planned_works.time_spent')
     def hours_left(self):
-        for hour in self:
-            remaining_hour = 0.0
-            for line in hour.planned_works:
-                remaining_hour += line.time_spent
-            self.remaining_hour = remaining_hour - self.effective_hour
+        for record in self:
+            record.remaining_hour = sum(record.mapped('planned_works').mapped('time_spent')) - record.effective_hour
 
-    def process_demo_scheduler_queue(self):
-        obj = self.env['car.workshop']
-        obj1 = obj.search([])
-        now = fields.Datetime.from_string(fields.Datetime.now())
-        for obj2 in obj1:
-            obj3 = obj2
-            if obj3.stage_id.name != 'Done' and obj3.stage_id.name != 'Cancelled' and obj3.stage_id.name != 'Verified':
-                end_date = fields.Datetime.from_string(obj3.date_deadline)
-                start_date = fields.Datetime.from_string(obj3.date_assign)
-                if obj3.date_deadline and obj3.date_assign and end_date > start_date:
-                    if now < end_date:
+
+    @api.constrains('date_assign', 'date_deadline')
+    def update_wworkshop_worked_time_progress(self):
+        for rec in self:
+            if not rec.stage_id.is_final_stage and not rec.stage_id.is_cancelled_stage:
+                end_date = fields.Datetime.from_string(rec.date_deadline)
+                start_date = fields.Datetime.from_string(rec.date_assign)
+                current_date = fields.Datetime.from_string(fields.Datetime.now())
+                if rec.date_deadline and rec.date_assign and end_date > start_date:
+                    if current_date < end_date:
                         diff1 = relativedelta(end_date, start_date)
                         if diff1.days == 0:
                             total_hr = int(diff1.minutes)
                         else:
                             total_hr = int(diff1.days) * 24 * 60 + int(diff1.minutes)
-                        diff2 = relativedelta(now, start_date)
+                        diff2 = relativedelta(current_date, start_date)
                         if diff2.days == 0:
                             current_hr = int(diff2.minutes)
                         else:
                             current_hr = int(diff2.days) * 24 * 60 + int(diff2.minutes)
                         if total_hr != 0:
-                            obj3.progress = ((current_hr * 100) / total_hr)
+                            rec.progress = ((current_hr * 100) / total_hr)
                         else:
-                            obj3.progress = 100
+                            rec.progress = 100
                     else:
-                        obj3.progress = 100
+                        rec.progress = 100
                 else:
-                    obj3.progress = 0
+                    rec.progress = 0
 
     @api.model
     def _track_subtype(self, init_values):
@@ -356,7 +377,7 @@ class CarWorkshop(models.Model):
         return result
 
     def change_date_end(self, stage_id):
-        worksheet_stage = self.env['worksheet.stages'].browse(stage_id)
+        worksheet_stage = self.env['vehicle.worksheet.stages'].browse(stage_id)
         if worksheet_stage.fold:
             return {'date_end': fields.Datetime.now()}
         return {'date_end': False}
@@ -365,29 +386,28 @@ class CarWorkshop(models.Model):
     def onchange_vehicle(self):
         if self.vehicle_id.exists():
             self.partner_id = self.vehicle_id.partner_id
-            self.stage_id = self.stage_find(self.vehicle_id, [('fold', '=', False)])
 
-    def stage_find(self, section_id, domain=[], order='sequence'):
+    def stage_find(self, vehicle_id, domain=[], order='sequence'):
         """ Override of the base.stage method
             Parameter of the stage search taken from the lead:
-            - section_id: if set, stages must belong to this section or
+            - vehicle_id: if set, stages must belong to this section or
               be a default stage; if not set, stages must be default
               stages
         """
-        # collect all section_ids
-        section_ids = []
-        if section_id:
-            section_ids.append(section_id)
-        section_ids.extend(self.mapped('vehicle_id').ids)
+        # collect all vehicle_ids
+        vehicle_ids = []
+        if vehicle_ids:
+            vehicle_ids.append(vehicle_id)
+        vehicle_ids.extend(self.mapped('vehicle_id').ids)
         search_domain = []
-        if section_ids:
-            search_domain = [('|')] * (len(section_ids) - 1)
-            for section_id in section_ids:
-                if isinstance(section_id, (int, long)):
-                    search_domain.append(('vehicle_ids', '=', section_id))
+        if vehicle_ids:
+            search_domain = [('|')] * (len(vehicle_ids) - 1)
+            for vehicle in vehicle_ids:
+                if isinstance(vehicle, (int, long)):
+                    search_domain.append(('vehicle_ids', '=', vehicle))
         search_domain += list(domain)
         # perform search, return the first found
-        stage_ids = self.env['worksheet.stages'].search(search_domain, order=order, limit=1).id
+        stage_ids = self.env['vehicle.worksheet.stages'].search(search_domain, order=order, limit=1).id
         if stage_ids:
             return stage_ids
         return False
@@ -405,6 +425,7 @@ class CarWorkshop(models.Model):
         }
 
     def compute_invoice_count(self):
+        account_move_obj = self.env['account.move']
         for record in self:
-            record.invoice_count = self.env['account.move'].search_count(
+            record.invoice_count = account_move_obj.search_count(
                 [('invoice_origin', '=', self.name)])

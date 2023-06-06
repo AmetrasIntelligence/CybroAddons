@@ -19,14 +19,11 @@
 ##############################################################################
 import base64
 
-from odoo.osv import osv
-from odoo.tools.translate import _
-from odoo import fields, api
+from odoo import models, fields,  _
 
-
-class CarVehicle(osv.osv):
-    _name = 'car.car'
-    _description = "Vechicles"
+class CarVehicle(models.Model):
+    _name = 'cars.cars'
+    _description = "Vehicles"
     _inherit = ['mail.thread']
     _rec_name = 'vehicle_id'
 
@@ -37,7 +34,7 @@ class CarVehicle(osv.osv):
     label_tasks = fields.Char(string='Use Tasks as', help="Gives label to Work on kanban view.", default="Task")
     worksheet = fields.One2many('car.workshop', 'vehicle_id', string="Task Activities")
 
-    type_ids = fields.Many2many('worksheet.stages', 'car_workshop_type_rel',
+    type_ids = fields.Many2many('vehicle.worksheet.stages', 'car_workshop_type_rel',
                                  'vehicle_id', 'type_id', string='Worksheet Stages',
                                  states={'close': [('readonly', True)], 'cancelled': [('readonly', True)]})
     task_count = fields.Integer(compute='_compute_task_count', type='integer', string="Tasks" )
@@ -70,7 +67,7 @@ class CarVehicle(osv.osv):
             vehicle.doc_count = Attachment.search_count([
                 '|',
                 '&',
-                ('res_model', '=', 'car.car'), ('res_id', '=', vehicle.id),
+                ('res_model', '=', 'cars.cars'), ('res_id', '=', vehicle.id),
                 '&',
                 ('res_model', '=', 'car.worksheet'), ('res_id', 'in', vehicle.task_ids.ids)
             ])
@@ -83,7 +80,7 @@ class CarVehicle(osv.osv):
         self.ensure_one()
         domain = [
             '|',
-            '&', ('res_model', '=', 'car.car'), ('res_id', 'in', self.ids),
+            '&', ('res_model', '=', 'cars.cars'), ('res_id', 'in', self.ids),
             '&', ('res_model', '=', 'car.workshop'), ('res_id', 'in', self.task_ids.ids)]
 
         return {

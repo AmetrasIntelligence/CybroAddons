@@ -1,8 +1,8 @@
 <odoo>
     <data>
         <record model="ir.ui.view" id="planned_work_form_view">
-            <field name="name">planned.work.form</field>
-            <field name="model">planned.work</field>
+            <field name="name">workshop.planned.work.form</field>
+            <field name="model">workshop.planned.work</field>
             <field name="arch" type="xml">
                 <form string="Planned Work">
                     <group>
@@ -21,8 +21,8 @@
         </record>
 
         <record model="ir.ui.view" id="material_used_form_view">
-            <field name="name">material.used.form</field>
-            <field name="model">material.used</field>
+            <field name="name">workshop.material.used.form</field>
+            <field name="model">workshop.material.used</field>
             <field name="arch" type="xml">
                 <form string="Work Done">
                     <group>
@@ -39,8 +39,8 @@
         </record>
 
         <record model="ir.ui.view" id="material_used_tree_view">
-            <field name="name">material.used.tree</field>
-            <field name="model">material.used</field>
+            <field name="name">workshop.material.used.tree</field>
+            <field name="model">workshop.material.used</field>
             <field name="arch" type="xml">
                 <tree string="Materials" editable="bottom">
                     <field name="material"/>

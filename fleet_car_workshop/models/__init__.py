@@ -17,7 +17,9 @@
 #    If not, see <https://www.gnu.org/licenses/>.
 #
 ##############################################################################
+from . import stock_picking
+from . import dashboard
 from . import car_workshop
 from . import timesheet
-from . import dashboard
 from . import config
+

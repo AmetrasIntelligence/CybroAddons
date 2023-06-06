@@ -1,7 +1,7 @@
 <odoo>
     <record id="car_car_form" model="ir.ui.view">
-        <field name="name">car.car.form</field>
-        <field name="model">car.car</field>
+        <field name="name">cars.cars.form</field>
+        <field name="model">cars.cars</field>
         <field name="arch" type="xml">
             <form string="Vehicle">
                 <header>
@@ -19,12 +19,8 @@
                         <button class="oe_stat_button" name="attachment_tree_views" type="object" icon="fa-files-o">
                             <field string="Documents" name="doc_count" widget="statinfo"/>
                         </button>
-                        <button name="toggle_active" type="object"
-                                confirm="(Un)archiving a project automatically (un)archives its tasks and issues. Do you want to proceed?"
-                                class="oe_stat_button" icon="fa-archive">
-                            <field name="active" widget="boolean_button"
-                                   options='{"terminology": "archive"}'/>
-                        </button>
+                        <field name="active" widget="boolean_button"
+                                   invisible="1" options='{"terminology": "archive"}'/>
 
                     </div>
                     <field name="image_128" widget='image' class="oe_avatar"/>
@@ -60,11 +56,11 @@
     </record>
 
     <record id="view_car_car_filter" model="ir.ui.view">
-        <field name="name">car.car.select</field>
-        <field name="model">car.car</field>
+        <field name="name">cars.cars.select</field>
+        <field name="model">cars.cars</field>
         <field name="arch" type="xml">
             <search string="Search Vehicle">
-                <field name="vehicle_id" string="Vehicle Name"/>
+<!--                <field name="vehicle_id" string="Vehicle Name"/>-->
                 <filter string="Open" name="Current" domain="[('state', '=','open')]"/>
                 <filter string="Pending" name="Pending" domain="[('state', '=','pending')]"/>
                 <separator/>
@@ -79,8 +75,8 @@
     </record>
 
     <record model="ir.ui.view" id="view_car_car_kanban">
-        <field name="name">car.car.kanban</field>
-        <field name="model">car.car</field>
+        <field name="name">cars.cars.kanban</field>
+        <field name="model">cars.cars</field>
         <field name="arch" type="xml">
             <kanban class="oe_background_grey o_kanban_dashboard o_project_kanban">
                 <field name="vehicle_id"/>
@@ -98,7 +94,7 @@
                             <div class="o_project_kanban_main">
                                 <div class="o_kanban_card_content">
                                     <div class="o_kanban_image">
-                                        <img t-att-src="kanban_image('car.car', 'image_128', record.id.raw_value)"
+                                        <img t-att-src="kanban_image('cars.cars', 'image_128', record.id.raw_value)"
                                              alt="Vehicle" class="o_image_64_contain"/>
                                     </div>
                                     <div class="o_kanban_primary_left">
@@ -161,8 +157,8 @@
     </record>
 
     <record id="view_car_car_tree" model="ir.ui.view">
-        <field name="name">car.car.tree</field>
-        <field name="model">car.car</field>
+        <field name="name">cars.cars.tree</field>
+        <field name="model">cars.cars</field>
         <field name="field_parent">child_ids</field>
         <field name="arch" type="xml">
             <tree decoration-info="state in ('draft','pending')" decoration-muted="state in ('close','cancelled')"
@@ -176,7 +172,7 @@
 
     <record id="open_view_vehicle_all" model="ir.actions.act_window">
         <field name="name">Vehicles</field>
-        <field name="res_model">car.car</field>
+        <field name="res_model">cars.cars</field>
         <field name="domain">[]</field>
         <field name="view_mode">kanban,form</field>
         <field name="search_view_id" ref="view_car_car_filter"/>
@@ -194,7 +190,7 @@
 
     <record id="config_view_vehicle_all" model="ir.actions.act_window">
         <field name="name">Vehicles</field>
-        <field name="res_model">car.car</field>
+        <field name="res_model">cars.cars</field>
         <field name="domain">[]</field>
         <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_car_car_filter"/>

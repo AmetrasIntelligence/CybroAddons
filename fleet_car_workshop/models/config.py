@@ -17,11 +17,8 @@
 #    If not, see <https://www.gnu.org/licenses/>.
 #
 ##############################################################################
-from odoo.tools.translate import _
-from odoo import fields, models, api
-
-
-from odoo import fields, models
+from odoo.exceptions import UserError
+from odoo import models, api, fields, _
 
 
 class WorkshopSetting(models.TransientModel):
@@ -31,7 +28,7 @@ class WorkshopSetting(models.TransientModel):
 
 
 class WorksheetTags(models.Model):
-    _name = "worksheet.tags"
+    _name = "workshop.worksheet.tags"
     _description = "Tags of vehicles's tasks, issues..."
 
     name = fields.Char('Name', required=True)
@@ -43,7 +40,7 @@ class WorksheetTags(models.Model):
 
 
 class WorksheetStages(models.Model):
-    _name = 'worksheet.stages'
+    _name = 'vehicle.worksheet.stages'
     _description = 'worksheet Stage'
     _order = 'sequence'
 
@@ -54,9 +51,43 @@ class WorksheetStages(models.Model):
     name = fields.Char(string='Stage Name', required=True)
     description = fields.Text(string='Description', translate=True)
     sequence = fields.Integer(string='Sequence')
-    vehicle_ids = fields.Many2many('car.car', 'worksheet_type_rel', 'type_id', 'vehicle_id', string='Vechicles',
+    vehicle_ids = fields.Many2many('cars.cars', 'worksheet_type_rel', 'type_id', 'vehicle_id', string='Vehicles',
         default=_get_default_vehicle_ids)
     fold = fields.Boolean('Folded in Tasks Pipeline',
                           help='This stage is folded in the kanban view when '
                                'there are no records in that stage to display.')
+    is_final_stage = fields.Boolean(string="Is Final Stage")
+    is_cancelled_stage = fields.Boolean(string="Is Cancelled Stage")
+    active = fields.Boolean(default=True)
+
+    @api.constrains('is_final_stage')
+    def _check_final_stage(self):
+        for rec in self:
+            final_stages_count = self.search_count([('is_final_stage', '=', True)])
+            if final_stages_count == 0 :
+                raise UserError(_("You have to configured a stage as a final Stage"))
+            elif final_stages_count > 1 :
+                raise UserError(_("Not Allowed to configure multiple final stages"))
+
+    @api.constrains('is_cancelled_stage')
+    def _check_cancelled_stage(self):
+        for rec in self:
+            cancelled_stages_count = self.search_count([('is_cancelled_stage', '=', True)])
+            if cancelled_stages_count == 0:
+                raise UserError(_("You have to configure a stage as a cancelled Stage"))
+            elif cancelled_stages_count > 1:
+                raise UserError(_("Not Allowed to configure multiple cancelled stages"))
+
+    @api.constrains('is_cancelled_stage','is_final_stage')
+    def _check_combined_stages(self):
+        for rec in self:
+            if rec.is_final_stage and rec.is_cancelled_stage:
+                raise UserError(_("Not Allowed to configure a stage as both cancelled stage and final stage"))
+
+
+
+
+
+
+
 
