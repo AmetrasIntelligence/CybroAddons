@@ -17,7 +17,7 @@
           <field name="name">Fleet scheduler</field>
           <field name="model_id" ref="fleet_rental.model_car_rental_contract"/>
           <field name="state">code</field>
-          <field name="code">model.fleet_scheduler()</field>
+          <field name="code">model.fleet_recurring_invoices_scheduler()</field>
           <field name="active" eval="True"/>
           <field name="user_id" ref="base.user_root"/>
           <field name="interval_number">1</field>
@@ -33,7 +33,7 @@
             <field name="arch" type="xml">
                 <field name="car_value" position="after">
                     <field name="rental_check_availability" invisible="1"/>
-                    <field name="rental_reserved_time" invisible="1"/>
+                    <field name="rental_fleet_reserved_ids" invisible="1"/>
                 </field>
                 <field name="color" position="replace">
                     <field name="color"/>
@@ -48,12 +48,14 @@
             <field name="arch" type="xml">
                 <form string="car_result">
                     <header>
+                        <button name="action_draft" string="Set to Draft" type="object"
+                                attrs="{'invisible': [('state', '!=', 'cancel')]}" class="oe_highlight"/>
                         <button name="action_confirm" string="Confirm" type="object"
                                 attrs="{'invisible': [('state', '!=', 'draft')]}" class="oe_highlight"/>
                         <button name="action_run" string="Run" type="object"
                                 attrs="{'invisible': [('state', '!=', 'reserved')]}" class="oe_highlight"/>
                         <button name="action_cancel" string="Cancel" type="object"
-                                attrs="{'invisible': [('state', 'not in', ('draft', 'reserved'))]}" class="oe_highlight"/>
+                                attrs="{'invisible': [('state', 'not in', ('draft', 'reserved','running'))]}" class="oe_highlight"/>
                         <button name="action_invoice_create" string="Create Invoice"
                                 attrs="{'invisible': ['|',('state', '!=', 'running'),
                                 ('first_invoice_created','=',True)]}" type="object" class="oe_highlight"/>
@@ -73,23 +75,25 @@
                         <field name="image" widget='image' class="oe_avatar"/>
                         <div class="oe_title">
                             <h1>
-                                <field name="name"/>
+                                <field name="name" force_save="1"/>
                             </h1>
                         </div>
                         <group>
                             <separator string="Contract Details " colspan="4" />
                             <group>
+                                <field name="company_id"/>
                                 <field name="customer_id"  string="Customer" attrs="{'readonly': [('state','!=','draft')]}"/>
                                 <field name="rent_start_date" attrs="{'readonly': [('state','!=','draft')]}"/>
                                 <field name="rent_end_date" attrs="{'readonly': [('state','!=','draft')]}"/>
                                 <field name="vehicle_id" domain="[('rental_check_availability','=',True),
                                 ('state_id.name','!=','Inactive')]"
                                    options="{'no_create': True}"/>
-                                <field name="journal_type" invisible="1" />
+                                <field name="journal_id" invisible="0" />
                                 <field name="check_verify" invisible="1" />
                                 <field name="sales_person" attrs="{'readonly': [('state','!=','draft')]}"/>
                             </group>
                             <group>
+
                                 <field name="car_brand"/>
                                 <field name="car_color"/>
                                 <field name="first_invoice_created" invisible="1"/>
@@ -100,7 +104,6 @@
                                                 ('first_invoice_created','=',True)]}"/>
                                     <field name="first_payment_inv" style="width:142px;" readonly="1"/>
                                 </div>
-                                <field name="account_type" invisible="1"/>
                                 <field name="cost" invisible="1"/>
                                 <label for="cost_generated"/>
                                     <div>
@@ -207,8 +210,6 @@
             <field name="view_mode">tree,form</field>
         </record>
 
-        <menuitem name="Fleet Rental" id="fleet.menu_root" sequence="115" groups="fleet.fleet_group_user"
-                  web_icon="fleet,static/description/icon.png"/>
         <menuitem id="menu_car_parent" sequence="1" name="Rental Management" parent="fleet.menu_root"/>
         <menuitem id="menu_car_rental_contract" parent="menu_car_parent" name="Rental Contract"
                   action="action_car_rental_contract" sequence="1"/>

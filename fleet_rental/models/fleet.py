@@ -30,7 +30,7 @@ class FleetReservedTime(models.Model):
     customer_id = fields.Many2one('res.partner', string='Customer')
     date_from = fields.Date(string='Reserved Date From')
     date_to = fields.Date(string='Reserved Date To')
-    reserved_obj = fields.Many2one('fleet.vehicle')
+    reserved_vehicle_id = fields.Many2one('fleet.vehicle')
 
 
 class EmployeeFleet(models.Model):
@@ -38,7 +38,7 @@ class EmployeeFleet(models.Model):
 
     rental_check_availability = fields.Boolean(default=True, copy=False)
     color = fields.Char(string='Color', default='#FFFFFF')
-    rental_reserved_time = fields.One2many('rental.fleet.reserved', 'reserved_obj', String='Reserved Time', readonly=1,
+    rental_fleet_reserved_ids = fields.One2many('rental.fleet.reserved', 'reserved_vehicle_id', String='Reserved Time', readonly=1,
                                            ondelete='cascade')
     fuel_type = fields.Selection([('gasoline', 'Gasoline'),
                                   ('diesel', 'Diesel'),
