@@ -319,29 +319,22 @@ class CarRentalContract(models.Model):
                 'invoice_origin': self.name,
                 'company_id': self.company_id.id,
                 'invoice_date_due': self.rent_end_date,
+                'type': 'out_invoice',
                 'invoice_line_ids': move_lines
             }
             inv_id = inv_obj.create(inv_data)
-            imd = self.env['ir.model.data']
-            action = imd.xmlid_to_object('account.view_move_tree')
-            list_view_id = self.env.ref('account.view_move_form', False)
-            form_view_id = self.env.ref('account.view_move_tree', False)
+            form_view_id = self.env.ref('account.view_move_form', False)
             result = {
-                'domain': "[('id', '=', " + str(inv_id) + ")]",
-                'name': 'Fleet Rental Invoices',
-                'view_mode': 'form',
-                'res_model': 'account.move',
-                'type': 'ir.actions.act_window',
-                'views': [(list_view_id.id, 'tree'), (form_view_id.id, 'form')],
+                    'view_type': 'form',
+                    'view_mode': 'form',
+                    'res_model': 'account.move',
+                    'view_id': form_view_id.id,
+                    'type': 'ir.actions.act_window',
+                    'name': _('Invoice'),
+                    'res_id': inv_id.id
+
             }
 
-            if len(inv_id) > 1:
-                result['domain'] = "[('id','in',%s)]" % inv_id.ids
-            elif len(inv_id) == 1:
-                result['views'] = [(form_view_id, 'form')]
-                result['res_id'] = inv_id.ids[0]
-            else:
-                result = {'type': 'ir.actions.act_window_close'}
             return result
 
     def action_confirm(self):
